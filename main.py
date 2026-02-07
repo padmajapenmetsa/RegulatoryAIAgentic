@@ -1,62 +1,73 @@
-#Main file
-
 import os
+import json
 from memory.agent_memory import RegulatoryMemory
 from tools.audit_logger import AuditLogger
-# Assuming you've stored your prompts in a /prompts folder
-from langchain.prompts import PromptTemplate
 
 class RegulatoryAgent:
     def __init__(self):
         self.memory = RegulatoryMemory()
         self.audit = AuditLogger()
-        self.agent_name = "RegBot-Alpha"
+        self.prompts_dir = "prompts"
+
+    def _load_prompt(self, filename, **kwargs):
+        """Reads a prompt file and injects variables."""
+        path = os.path.join(self.prompts_dir, f"{filename}.txt")
+        try:
+            with open(path, "r") as f:
+                template = f.read()
+            # Replace {{variable}} with actual data
+            for key, value in kwargs.items():
+                template = template.replace(f"{{{{{key}}}}}", str(value))
+            return template
+        except FileNotFoundError:
+            return f"Error: Prompt file {filename}.txt not found."
+
+    def perceive(self, raw_text):
+        print("--- [STAGE 1: PERCEIVE] ---")
+        # Load the specific Perceive prompt logic
+        prompt = self._load_prompt("perceive", raw_document_text=raw_text)
         
-    def run_cycle(self, raw_circular_text):
-        """Executes the full Perceive-Plan-Act loop."""
-        
-        # 1. PERCEIVE
-        # Check memory for historical context first
-        past_context = self.memory.query_past_cases(raw_circular_text)
-        
-        print(f"--- [PERCEIVE] Analyzing Circular ---")
-        # In a real app, this would be an LLM call using perceive.txt
-        perceived_impact = {
-            "requirement": "Liquidity Coverage Ratio update",
-            "impact_level": "High",
-            "historical_match": past_context['ids'][0] if past_context['ids'] else "None"
+        # Simulated LLM Response (In reality, you'd pass 'prompt' to Llama 3)
+        perceived_data = {
+            "issuing_body": "Basel Committee",
+            "deadline": "2026-12-31",
+            "impacted_reports": ["LCR_Liquidity_Report"],
+            "urgency_score": "9"
         }
-        self.audit.log_entry("PERCEIVE", raw_circular_text, str(perceived_impact))
+        self.audit.log_entry("PERCEIVE", prompt, json.dumps(perceived_data))
+        return perceived_data
 
-        # 2. PLAN
-        print(f"--- [PLAN] Developing Implementation Roadmap ---")
-        # Logic to map perceived impact to internal systems
-        execution_plan = [
-            "Update Data Mapping for Table: HQLA_Assets",
-            "Generate Compliance Checklist for SME review",
-            "Update SQL View: v_regulatory_lcr_report"
-        ]
-        self.audit.log_entry("PLAN", str(perceived_impact), str(execution_plan))
-
-        # 3. ACT
-        print(f"--- [ACT] Executing Actions ---")
-        for step in execution_plan:
-            # Simulate tool execution
-            print(f"Executing: {step}")
-            
-        # Final Step: Update Memory with this new case
-        self.memory.add_memory(
-            doc_id=f"REG-{os.urandom(2).hex()}",
-            text=raw_circular_text,
-            metadata={"status": "Processed"}
-        )
+    def plan(self, context):
+        print("--- [STAGE 2: PLAN] ---")
+        prompt = self._load_prompt("plan", perceived_context=json.dumps(context))
         
-        self.audit.log_entry("ACT", "All steps executed", "Success - Awaiting Human Sign-off")
-        print("\n--- Cycle Complete. Audit Log Updated. ---")
+        # Simulated logic mapping context to steps
+        steps = ["Update SQL logic for LCR", "Draft SME Summary", "Human Sign-off"]
+        self.audit.log_entry("PLAN", prompt, str(steps))
+        return steps
+
+    def act(self, steps):
+        print("--- [STAGE 3: ACT] ---")
+        for step in steps:
+            prompt = self._load_prompt("act", current_step=step, tools_list="SQL_Generator, Jira")
+            
+            if "Human Sign-off" in step:
+                print(f"Action: {step} -> Awaiting SME input...")
+            else:
+                print(f"Action: {step} -> Executed using Act Prompt Logic")
+            
+            self.audit.log_entry("ACT", prompt, f"Executed: {step}")
+
+    def run(self, raw_circular):
+        # 1. Perception
+        context = self.perceive(raw_circular)
+        # 2. Planning
+        steps = self.plan(context)
+        # 3. Action
+        self.act(steps)
+        print("\nWorkflow complete. Audit logs and Memory updated.")
 
 if __name__ == "__main__":
-    # Simulate a new regulation arriving
-    new_regulation = "Regulator B-12: Increase high-quality liquid assets by 2%."
-    
     agent = RegulatoryAgent()
-    agent.run_cycle(new_regulation)
+    input_text = "Circular 405: Banks must increase HQLA by 5% effective Dec 2026."
+    agent.run(input_text)
